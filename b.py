@@ -1,93 +1,98 @@
-from tkinter.messagebox import showinfo
-import customtkinter as ctk
-from tkinter import simpledialog,Canvas
+import tkinter as tk
+from tkinter import Checkbutton, Canvas, IntVar, messagebox
 from PIL import Image, ImageTk
-import pygame
+import os
 
-pildid = {}
-objektid = {}
-olemas = {}
+# Глобальные переменные
+pildid = {}       # Для хранения PhotoImage
+objektid = {}     # ID объектов на Canvas
+olemas = {}       # Какие части выбраны
+canvas = None     # Сюда добавим позже Canvas
 
-def toggle_osa(nimi, fail, x, y):
+# Конфигурация частей лица
+nao_osad = {
+    "näo ovaal": ("naovorm1.png", 200, 200),
+    "silmad": ("silmad1.png", 200, 200),
+    "nina": ("nina1.png", 200, 200),
+    "suu": ("suu1.png", 200, 200),
+    "kulmud": ("kulmud1.png", 200, 200)
+}
+
+def toggle_osa(nimi):
+    """Добавляет или убирает часть лица"""
     if olemas.get(nimi):
         canvas.delete(objektid[nimi])
         olemas[nimi] = False
     else:
-        pil_img = Image.open(fail).convert("RGBA").resize((400, 400))
-        tk_img = ImageTk.PhotoImage(pil_img)
-        pildid[tk_img]
-        objektid[nimi]=canvas.create_image(x, y, image=tk_img)
+        fail, x, y = nao_osad[nimi]
+        if not os.path.exists(fail):
+            messagebox.showwarning("Ошибка", f"Файл не найден: {fail}")
+            return
+        img = Image.open(fail).convert("RGBA").resize((400, 400))
+        tk_img = ImageTk.PhotoImage(img)
+        pildid[nimi] = tk_img
+        objektid[nimi] = canvas.create_image(x, y, image=tk_img)
         olemas[nimi] = True
 
-def m�ngi_muusika():
-    pygame.mixer.music.play(loops=-1)
+def salvesta_robot():
+    """Сохраняет текущую комбинацию"""
+    valitud = [nimi for nimi in nao_osad if olemas.get(nimi)]
+    with open("fotorobotid.txt", "a", encoding="utf-8") as f:
+        f.write(",".join(valitud) + "\n")
+    messagebox.showinfo("Сохранено", "Фоторобот сохранён!")
 
-def peata_muusika():
-    pygame.mixer.music.stop()
-
-def salvesta_n�gu():
-    failinimi = simpledialog.askstring("Salvesta pilt", "Sisesta faili nimi (ilma laiendita:)")
-    if not failinimi:
+def lae_viimane_robot():
+    """Загружает последний сохранённый фоторобот"""
+    if not os.path.exists("fotorobotid.txt"):
+        messagebox.showinfo("Нет данных", "Сохранений пока нет.")
         return
+    with open("fotorobotid.txt", "r", encoding="utf-8") as f:
+        lines = f.readlines()
+        if not lines:
+            return
+        viimane = lines[-1].strip().split(",")
 
-    l�pp_pilt = Image.new("RGBA", (400, 400), (255, 255, 255, 255))
+    # Удаляем старые части
+    for nimi in olemas:
+        if olemas[nimi]:
+            canvas.delete(objektid.get(nimi))
+            olemas[nimi] = False
 
-    for nimi in ["n�gu", "otsmik", "silmad", "nina", "suu"]:
-        if olemas.get(nimi):
-            failitee = {
-                "n�gu": "alus.png",
-                "otsmik": "otsmik1.png",
-                "silmad": "silmad1.png",
-                "nina": "nian1.png",
-                "suu": "suu1.png"
-            }.get(nimi)
-            if failitee:
-                osa = Image.open(failitee).comvert("RGBA").resize((400, 400))
-                l�pp_pilt.alpha_composite(osa)
+    # Добавляем заново
+    for nimi in viimane:
+        if nimi in nao_osad:
+            toggle_osa(nimi)
 
-    l�pp_pilt.save(f"{failinimi}.png")
-    showinfo("Horaw! :D:", f"faili nimi on {failinimi}.png")
+def loo_gui():
+    """Создаёт окно"""
+    global canvas
+    root = tk.Tk()
+    root.title("Fotorobot")
+    root.geometry("800x500")
 
-pygame.mixer.init()
-pygame.mixer.music.load("opening.mp3")
-# ctk.set_appearence_mode("Light")
+    # Левая панель с Checkbuttons
+    frame = tk.Frame(root)
+    frame.pack(side="left", padx=10, pady=10)
 
-app= ctk.CTk()
-app.geometry("800x500")
-app.title("Neo")
+    variablid = {}
+    for nimi in nao_osad:
+        var = IntVar()
+        chk = Checkbutton(frame, text=nimi, variable=var,
+                          command=lambda n=nimi: toggle_osa(n))
+        chk.pack(anchor="w")
+        variablid[nimi] = var
 
-canvas= Canvas(app, width=400, height=400, bg="white")
-canvas.pack(side="right", padx=10, pady=10)
+    tk.Button(frame, text="💾 Сохранить", command=salvesta_robot).pack(pady=10)
+    tk.Button(frame, text="📂 Показать последний", command=lae_viimane_robot).pack(pady=5)
 
-toggle_osa("n�gu", "alus.png", 200, 200)
-olemas["n�gu"] = True
+    # Правая часть – Canvas
+    canvas = Canvas(root, width=400, height=400, bg="white")
+    canvas.pack(side="right", padx=10, pady=10)
 
-frame = ctk.CTkFrame(app)
-frame.pack(side="left", padx=10, pady=10)
-seaded = {
-    "width": 150, "height": 40,
-    "font": ("Segoe UI Emoji", 32),
-    "fg_color": "white",
-    "corner_radius": 20
-}
+    root.mainloop()
 
-ctk.CTkLabel(frame, text="nose", **seaded).pack(pady=5)
-ctk.CtkButton(frame, text="ostmik", command=lambda: toggle_osa("otsmil", "otsmi1.png", 200, 200), **seaded.pack(pady=3))
-
-ctk.CtkButton(frame, text="ostmik", command=lambda: toggle_osa("otsmil", "otsmi1.png", 200, 200), **seaded.pack(pady=3))
-
-ctk.CtkButton(frame, text="ostmik", command=lambda: toggle_osa("otsmil", "otsmi1.png", 200, 200), **seaded.pack(pady=3))
-
-ctk.CtkButton(frame, text="ostmik", command=lambda: toggle_osa("otsmil", "otsmi1.png", 200, 200), **seaded.pack(pady=3))
-
-ctk.CtkButton(frame, text="ostmik", command=lambda: toggle_osa("otsmil", "otsmi1.png", 200, 200), **seaded.pack(pady=3))
-
-nupp = ctk.CtkButton(frame, text="salvesta", command=salvesta_n�gu,**seaded.pack(pady=3))
-nupp.pack(pady=10)
-
-frame_mus = ctk.CtkFrame(frame)
-frame_mus.pack(padx=10, pady=10)
-ctk.CtkButton(frame_mus, text="m�ngi muusika", fg_color="#4CAF50", command=m�ngi_muusika.pack(side="left", pady=10))
-ctk.CtkButton(frame_mus, text="peata muusika", fg_color="#4CAF50", command=peata_muusika.pack(side="left", pady=10))
-
-app.mainloop()
+if __name__ == "__main__":
+    # Инициализация переменных
+    for k in nao_osad:
+        olemas[k] = False
+    loo_gui()
