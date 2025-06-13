@@ -1,98 +1,91 @@
-import tkinter as tk
-from tkinter import Checkbutton, Canvas, IntVar, messagebox
+from tkinter import *
 from PIL import Image, ImageTk
 import os
+import random
 
-# Глобальные переменные
-pildid = {}       # Для хранения PhotoImage
-objektid = {}     # ID объектов на Canvas
-olemas = {}       # Какие части выбраны
-canvas = None     # Сюда добавим позже Canvas
-
-# Конфигурация частей лица
-nao_osad = {
-    "näo ovaal": ("naovorm1.png", 200, 200),
-    "silmad": ("silmad1.png", 200, 200),
-    "nina": ("nina1.png", 200, 200),
-    "suu": ("suu1.png", 200, 200),
-    "kulmud": ("kulmud1.png", 200, 200)
+# Папки с изображениями по категориям
+ELEMENTS = {
+    "Лицо": "face",
+    "Глаза": "eyes",
+    "Нос": "nose",
+    "Рот": "mouth",
+    "Волосы": "hair"
 }
 
-def toggle_osa(nimi):
-    """Добавляет или убирает часть лица"""
-    if olemas.get(nimi):
-        canvas.delete(objektid[nimi])
-        olemas[nimi] = False
+# Словарь для хранения выбранных файлов
+selected_parts = {}
+
+# Главный интерфейс
+root = Tk()
+root.title("Фоторобот")
+root.geometry("600x400")
+
+# Левая панель — выбор частей
+frame_left = Frame(root)
+frame_left.pack(side=LEFT, padx=10, pady=10)
+
+# Правая панель — холст для отображения
+canvas = Canvas(root, width=200, height=250, bg="white")
+canvas.pack(side=RIGHT, padx=10, pady=10)
+
+# Для хранения изображений
+image_refs = {}
+
+# Функция для отображения фоторобота
+def show_robot():
+    canvas.delete("all")
+    y_offset = 0
+    image_refs.clear()
+    for part, folder in ELEMENTS.items():
+        if part in selected_parts:
+            path = os.path.join(folder, selected_parts[part])
+            if os.path.exists(path):
+                img = Image.open(path).resize((200, 250), Image.ANTIALIAS)
+                img_tk = ImageTk.PhotoImage(img)
+                canvas.create_image(0, 0, anchor=NW, image=img_tk)
+                image_refs[part] = img_tk
+
+# Функция при выборе элемента
+def update_part(part, var, folder):
+    files = os.listdir(folder)
+    if var.get() == 1:
+        selected_parts[part] = random.choice(files)
     else:
-        fail, x, y = nao_osad[nimi]
-        if not os.path.exists(fail):
-            messagebox.showwarning("Ошибка", f"Файл не найден: {fail}")
-            return
-        img = Image.open(fail).convert("RGBA").resize((400, 400))
-        tk_img = ImageTk.PhotoImage(img)
-        pildid[nimi] = tk_img
-        objektid[nimi] = canvas.create_image(x, y, image=tk_img)
-        olemas[nimi] = True
+        selected_parts.pop(part, None)
+    show_robot()
 
-def salvesta_robot():
-    """Сохраняет текущую комбинацию"""
-    valitud = [nimi for nimi in nao_osad if olemas.get(nimi)]
-    with open("fotorobotid.txt", "a", encoding="utf-8") as f:
-        f.write(",".join(valitud) + "\n")
-    messagebox.showinfo("Сохранено", "Фоторобот сохранён!")
+# Checkbuttons для каждого элемента
+for part_name, folder_name in ELEMENTS.items():
+    var = IntVar()
+    chk = Checkbutton(frame_left, text=part_name, variable=var,
+                      command=lambda p=part_name, v=var, f=folder_name: update_part(p, v, f))
+    chk.pack(anchor=W)
 
-def lae_viimane_robot():
-    """Загружает последний сохранённый фоторобот"""
-    if not os.path.exists("fotorobotid.txt"):
-        messagebox.showinfo("Нет данных", "Сохранений пока нет.")
-        return
-    with open("fotorobotid.txt", "r", encoding="utf-8") as f:
-        lines = f.readlines()
-        if not lines:
-            return
-        viimane = lines[-1].strip().split(",")
+# Файл для сохранения данных
+SAVE_FILE = "fotorobotid.txt"
 
-    # Удаляем старые части
-    for nimi in olemas:
-        if olemas[nimi]:
-            canvas.delete(objektid.get(nimi))
-            olemas[nimi] = False
+# Сохраняем текущую сборку
+def save_robot():
+    with open(SAVE_FILE, "a", encoding="utf-8") as f:
+        line = ", ".join(selected_parts.get(part, "-") for part in ELEMENTS)
+        f.write(line + "\n")
 
-    # Добавляем заново
-    for nimi in viimane:
-        if nimi in nao_osad:
-            toggle_osa(nimi)
+# Загружаем последний сохранённый робот
+def load_last_robot():
+    if os.path.exists(SAVE_FILE):
+        with open(SAVE_FILE, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            if lines:
+                last = lines[-1].strip().split(", ")
+                for i, part in enumerate(ELEMENTS):
+                    if last[i] != "-":
+                        selected_parts[part] = last[i]
+                    else:
+                        selected_parts.pop(part, None)
+                show_robot()
 
-def loo_gui():
-    """Создаёт окно"""
-    global canvas
-    root = tk.Tk()
-    root.title("Fotorobot")
-    root.geometry("800x500")
+# Кнопки управления
+Button(frame_left, text="💾 Сохранить фоторобот", command=save_robot).pack(pady=5)
+Button(frame_left, text="📂 Загрузить последний", command=load_last_robot).pack(pady=5)
 
-    # Левая панель с Checkbuttons
-    frame = tk.Frame(root)
-    frame.pack(side="left", padx=10, pady=10)
-
-    variablid = {}
-    for nimi in nao_osad:
-        var = IntVar()
-        chk = Checkbutton(frame, text=nimi, variable=var,
-                          command=lambda n=nimi: toggle_osa(n))
-        chk.pack(anchor="w")
-        variablid[nimi] = var
-
-    tk.Button(frame, text="💾 Сохранить", command=salvesta_robot).pack(pady=10)
-    tk.Button(frame, text="📂 Показать последний", command=lae_viimane_robot).pack(pady=5)
-
-    # Правая часть – Canvas
-    canvas = Canvas(root, width=400, height=400, bg="white")
-    canvas.pack(side="right", padx=10, pady=10)
-
-    root.mainloop()
-
-if __name__ == "__main__":
-    # Инициализация переменных
-    for k in nao_osad:
-        olemas[k] = False
-    loo_gui()
+root.mainloop()
